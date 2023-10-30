@@ -1,3 +1,5 @@
+find_package(Threads REQUIRED)
+
 function(sq_add_test TEST_NAME SOURCES)
     set(HEADER_FILES
             bundled/doctest/doctest.h
@@ -23,7 +25,7 @@ function(sq_add_test TEST_NAME SOURCES)
             ${CMAKE_CURRENT_SOURCE_DIR})
 
     # Link dependencies
-    target_link_libraries(${TEST_NAME} lockfree_queues)
+    target_link_libraries(${TEST_NAME} lockfree_queues Threads::Threads)
 
     # Do not decay cxx standard if not specified
     set_property(TARGET ${TEST_NAME} PROPERTY CXX_STANDARD_REQUIRED ON)
@@ -34,8 +36,6 @@ function(sq_add_test TEST_NAME SOURCES)
     # Add this target to the post build unit tests
     doctest_discover_tests(${TEST_NAME})
 endfunction()
-
-message(STATUS ${PROJECT_SOURCE_DIR})
 
 include(${PROJECT_SOURCE_DIR}/cmake/doctest.cmake)
 
