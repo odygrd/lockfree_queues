@@ -1,0 +1,5 @@
+add_executable(BENCHMARK_SP_BROADCAST_QUEUE_OPS sp_broadcast_queue_benchmark_ops.cpp)
+target_link_libraries(BENCHMARK_SP_BROADCAST_QUEUE_OPS lockfree_queues)
+
+add_executable(BENCHMARK_SP_BROADCAST_QUEUE_RTT sp_broadcast_queue_benchmark_rtt.cpp)
+target_link_libraries(BENCHMARK_SP_BROADCAST_QUEUE_RTT lockfree_queues)
