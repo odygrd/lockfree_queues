@@ -12,12 +12,12 @@ if (NOT CMAKE_CXX_STANDARD)
 endif ()
 
 # address sanitizer flags
-if (LOCKFREE_QUEUES)
+if (LOCKFREE_QUEUES_SANITIZE_ADDRESS)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address,undefined -fno-omit-frame-pointer -g")
 endif ()
 
 # thread sanitizer flags
-if (LOCKFREE_QUEUES)
+if (LOCKFREE_QUEUES_SANITIZE_THREAD)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=thread")
 endif ()
 
