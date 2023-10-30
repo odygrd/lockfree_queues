@@ -191,7 +191,7 @@ public:
     auto search_it = std::find_if(std::begin(_read_idx), std::end(_read_idx),
                                   [](auto const& reader_idx)
                                   {
-                                    return reader_idx.load(std::memory_order::memory_order_acquire) ==
+                                    return reader_idx.load(std::memory_order_acquire) ==
                                       std::numeric_limits<size_t>::max();
                                   });
 

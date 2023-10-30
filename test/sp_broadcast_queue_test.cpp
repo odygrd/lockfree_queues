@@ -17,7 +17,7 @@ struct SPBQTestType
 {
   static std::set<SPBQTestType const*> constructed;
 
-  SPBQTestType(uint32_t v) noexcept
+  SPBQTestType(size_t v) noexcept
   {
     x = v;
     REQUIRE_EQ(constructed.count(this), 0);
@@ -64,7 +64,7 @@ struct SPBQTestType
     constructed.erase(this);
   };
 
-  uint32_t x;
+  size_t x;
 };
 
 std::set<const SPBQTestType*> SPBQTestType::constructed;
