@@ -32,8 +32,11 @@
 ## Introduction
 
 This repository is dedicated to providing a collection of lock-free queues in C++.
+
 In the realm of concurrent programming, there are numerous ways to implement these queues, and several other
-repositories exist as well. The goal is to rework various queue types while focusing on making a handful of them
+repositories exist as well.
+
+The goal is to rework various queue types while focusing on making a handful of them
 efficient, thoroughly tested, and benchmarked.
 
 ## SPBroadcastQueue
@@ -53,9 +56,9 @@ consumers grows.
 
 ## Performance
 
-Throughput benchmark measures throughput between two threads for a queue of 2 * size_t items.
+Throughput benchmark measures throughput between two threads for a queue of `2 * size_t` items.
 
-Latency benchmark measures round trip time between two threads communicating using two queues of 2 * size_t items.
+Latency benchmark measures round trip time between two threads communicating using two queues of `2 * size_t` items.
 
 For the most accurate benchmark results, it is recommended to run the benchmarks in your own local environment.
 
