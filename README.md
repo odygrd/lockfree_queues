@@ -44,7 +44,7 @@ a Single-Producer, Multiple-Consumer (SPMC) queue, depending on the template arg
 It can handle both simple and more complex data types, ensuring that the producer takes care of creating and destroying
 objects in the queue. The producer synchronizes with consumers and waits for the slowest one when the queue is full.
 
-To use this queue, consumers need to first "subscribe()" to it, and then they can start consuming messages.
+To use this queue, consumers need to first `subscribe` to it, and then they can start consuming messages.
 Importantly, all consumers will see all the messages in the queue.
 
 In addition, special attention has been given to optimizing the queue to avoid performance bottlenecks,
@@ -52,6 +52,10 @@ such as false sharing and cache issues. This optimization leads to increased thr
 consumers grows.
 
 ## Performance
+
+Throughput benchmark measures throughput between two threads for a queue of 2 * size_t items.
+
+Latency benchmark measures round trip time between two threads communicating using two queues of 2 * size_t items.
 
 For the most accurate benchmark results, it is recommended to run the benchmarks in your own local environment.
 
