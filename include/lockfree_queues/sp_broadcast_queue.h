@@ -48,15 +48,23 @@ public:
       throw std::runtime_error{"items per batch must be power of 2"};
     }
 
-    for (size_t i = 0; i < MAX_READERS; ++i)
-    {
-      _reader_indexes[i].reset();
-    }
-
     // we add some padding to the start and end of the buffer to protect it from false sharing
     // --- padding --- | --- slots* ---- | --- padding --- |
     _buffer = std::allocator_traits<Allocator>::allocate(_allocator, _capacity + (2u * PADDING));
     _slots = _buffer + PADDING;
+
+    for (size_t i = 0; i < MAX_READERS; ++i)
+    {
+      _reader_cache[i].reset();
+    }
+
+    for (size_t i = 0; i < MAX_READERS; ++i)
+    {
+      _read_idx[i].store(std::numeric_limits<size_t>::max());
+    }
+
+    _write_idx.store(0);
+    _subscribe_lock.store(false);
   }
 
   /**
@@ -87,11 +95,10 @@ public:
     while ((_min_read_idx_cache == std::numeric_limits<size_t>::max()) ||
            ((write_idx - _min_read_idx_cache) == _capacity))
     {
-      _min_read_idx_cache = _reader_indexes[0].read_idx.load(std::memory_order_acquire);
-      for (size_t i = 1; i < _reader_indexes.size(); ++i)
+      _min_read_idx_cache = _read_idx[0].load(std::memory_order_acquire);
+      for (size_t i = 1; i < _read_idx.size(); ++i)
       {
-        _min_read_idx_cache =
-          std::min(_min_read_idx_cache, _reader_indexes[i].read_idx.load(std::memory_order_acquire));
+        _min_read_idx_cache = std::min(_min_read_idx_cache, _read_idx[i].load(std::memory_order_acquire));
       }
     }
 
@@ -118,11 +125,10 @@ public:
     if ((_min_read_idx_cache == std::numeric_limits<size_t>::max()) ||
         ((write_idx - _min_read_idx_cache) == _capacity))
     {
-      _min_read_idx_cache = _reader_indexes[0].read_idx.load(std::memory_order_acquire);
-      for (size_t i = 1; i < _reader_indexes.size(); ++i)
+      _min_read_idx_cache = _read_idx[0].load(std::memory_order_acquire);
+      for (size_t i = 1; i < _read_idx.size(); ++i)
       {
-        _min_read_idx_cache =
-          std::min(_min_read_idx_cache, _reader_indexes[i].read_idx.load(std::memory_order_acquire));
+        _min_read_idx_cache = std::min(_min_read_idx_cache, _read_idx[0].load(std::memory_order_acquire));
       }
 
       if ((_min_read_idx_cache == std::numeric_limits<size_t>::max()) ||
@@ -151,26 +157,25 @@ public:
 
   [[nodiscard]] value_type const* front(size_t reader_id) noexcept
   {
-    if (_reader_indexes[reader_id].read_local_idx == _reader_indexes[reader_id].write_idx_cache)
+    if (_reader_cache[reader_id].read_local_idx == _reader_cache[reader_id].write_idx_cache)
     {
-      _reader_indexes[reader_id].write_idx_cache = _write_idx.load(std::memory_order_acquire);
-      if (_reader_indexes[reader_id].read_local_idx == _reader_indexes[reader_id].write_idx_cache)
+      _reader_cache[reader_id].write_idx_cache = _write_idx.load(std::memory_order_acquire);
+      if (_reader_cache[reader_id].read_local_idx == _reader_cache[reader_id].write_idx_cache)
       {
         return nullptr;
       }
     }
 
-    return reinterpret_cast<value_type const*>(
-      &_slots[_reader_indexes[reader_id].read_local_idx & _capacity_minus_one]);
+    return reinterpret_cast<value_type const*>(&_slots[_reader_cache[reader_id].read_local_idx & _capacity_minus_one]);
   }
 
   void pop(size_t reader_id) noexcept
   {
-    ++_reader_indexes[reader_id].read_local_idx;
+    _reader_cache[reader_id].read_local_idx += 1;
 
-    if ((_reader_indexes[reader_id].read_local_idx & _items_per_batch_minus_one) == 0)
+    if ((_reader_cache[reader_id].read_local_idx & _items_per_batch_minus_one) == 0)
     {
-      _reader_indexes[reader_id].read_idx.store(_reader_indexes[reader_id].read_local_idx, std::memory_order_release);
+      _read_idx[reader_id].store(_reader_cache[reader_id].read_local_idx, std::memory_order_release);
     }
   }
 
@@ -183,23 +188,25 @@ public:
       // wait for the lock
     }
 
-    auto search_it = std::find_if(std::begin(_reader_indexes), std::end(_reader_indexes),
-                                  [](ReaderIndexes const& ri) {
-                                    return ri.write_idx_cache == std::numeric_limits<size_t>::max();
+    auto search_it = std::find_if(std::begin(_read_idx), std::end(_read_idx),
+                                  [](auto const& reader_idx)
+                                  {
+                                    return reader_idx.load(std::memory_order::memory_order_acquire) ==
+                                      std::numeric_limits<size_t>::max();
                                   });
 
-    if (search_it == std::end(_reader_indexes))
+    if (search_it == std::end(_read_idx))
     {
       _subscribe_lock.store(false);
       throw std::runtime_error{"Max consumers reached"};
     }
 
-    size_t const index = std::distance(std::begin(_reader_indexes), search_it);
+    size_t const index = std::distance(std::begin(_read_idx), search_it);
     size_t const write_idx = _write_idx.load(std::memory_order_acquire);
     size_t const last_write_idx = (write_idx == 0) ? 0 : write_idx - 1;
 
-    search_it->set(last_write_idx);
-
+    _reader_cache[index].set(last_write_idx);
+    _read_idx[index].store(last_write_idx, std::memory_order_release);
     _subscribe_lock.store(false);
     return index;
   }
@@ -210,7 +217,9 @@ public:
     {
       // wait for the lock
     }
-    _reader_indexes[reader_id].reset();
+
+    _reader_cache[reader_id].reset();
+    _read_idx[reader_id].store(std::numeric_limits<size_t>::max(), std::memory_order_release);
     _subscribe_lock.store(false);
   }
 
@@ -223,19 +232,16 @@ private:
   static constexpr size_t PADDING =
     (CACHE_LINE_SIZE - 1) / sizeof(value_type) + 1; /** How many T can we fit in a cache line **/
 
-  struct ReaderIndexes
+  struct ReaderCache
   {
     void set(size_t v) noexcept
     {
       read_local_idx = v;
       write_idx_cache = v;
-      read_idx.store(v, std::memory_order_release);
     }
 
     void reset() noexcept { set(std::numeric_limits<size_t>::max()); }
 
-    /** Members **/
-    alignas(CACHE_LINE_SIZE) std::atomic<size_t> read_idx{std::numeric_limits<size_t>::max()};
     alignas(CACHE_LINE_SIZE) size_t read_local_idx{std::numeric_limits<size_t>::max()};
     size_t write_idx_cache{std::numeric_limits<size_t>::max()};
   };
@@ -252,6 +258,7 @@ private:
 
   alignas(CACHE_LINE_SIZE) std::atomic<size_t> _write_idx = {0};
   alignas(CACHE_LINE_SIZE) size_t _min_read_idx_cache = std::numeric_limits<size_t>::max();
-  alignas(CACHE_LINE_SIZE) std::array<ReaderIndexes, MAX_READERS> _reader_indexes;
+  alignas(CACHE_LINE_SIZE) std::array<std::atomic<size_t>, MAX_READERS> _read_idx;
+  alignas(CACHE_LINE_SIZE) std::array<ReaderCache, MAX_READERS> _reader_cache;
 };
 } // namespace lockfree_queues
