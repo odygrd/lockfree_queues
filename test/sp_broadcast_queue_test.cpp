@@ -227,6 +227,62 @@ TEST_CASE("single_produce_multiple_consumers")
 }
 
 /***/
+TEST_CASE("single_produce_multiple_consumers_2")
+{
+  // All Consumers subscribe before producer starts producing
+  // Same as single_produce_multiple_consumers but with MAX_CONSUMERS == 8
+  const size_t iter = 1'000'000;
+  constexpr size_t MAX_CONSUMERS = 8;
+  SPBroadcastQueue<size_t, MAX_CONSUMERS> q{1024};
+
+  std::array<std::atomic<bool>, MAX_CONSUMERS> flags = {false};
+
+  std::thread producer{[&q, &flags, iter]()
+                       {
+                         for (auto const& flag : flags)
+                         {
+                           while (!flag)
+                             ;
+                         }
+
+                         for (size_t i = 0; i < iter; ++i)
+                         {
+                           q.emplace(i);
+                         }
+                       }};
+
+  std::vector<std::thread> consumers;
+  for (size_t tid = 0; tid < MAX_CONSUMERS; ++tid)
+  {
+    consumers.emplace_back(
+      [&q, &flags, tid, iter]()
+      {
+        size_t rid = q.subscribe();
+        size_t sum = 0;
+        flags[tid] = true;
+
+        for (size_t i = 0; i < iter; ++i)
+        {
+          while (!q.front(rid))
+            ;
+          sum += *q.front(rid);
+          q.pop(rid);
+        }
+
+        REQUIRE_EQ(q.front(rid), nullptr);
+        REQUIRE_EQ(sum, iter * (iter - 1) / 2);
+        q.unsubscribe(rid);
+      });
+  }
+
+  for (auto& c : consumers)
+  {
+    c.join();
+  }
+  producer.join();
+}
+
+/***/
 TEST_CASE("single_produce_multiple_consumers_subscribe")
 {
   // Consumers subscribe after the producer starts

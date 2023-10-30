@@ -16,9 +16,25 @@ namespace lockfree_queues
 
 /***
  * A bounded single-producer multiple-consumer queue.
- * All consumers will see the same message.
- * When the queue gets full the producer will wait on the slowest consumer
- * This queue can also be used as single-producer single-consumer queue
+ * The queue can function as both a Single-Producer, Single-Consumer (SPSC) queue and
+ * a Single-Producer, Multiple-Consumer (SPMC) queue, depending on the template arguments provided.
+ *
+ * It can handle both simple and more complex data types, ensuring that the producer takes care of
+ * creating and destroying objects in the queue.
+ * The producer synchronizes with consumers and waits for the slowest one when the queue is full.
+ * To use this queue, consumers need to first "subscribe()" to it, and then they can start
+ * consuming messages.
+ * Importantly, all consumers will see all the messages in the queue.
+ *
+ * In addition, special attention has been given to optimizing the queue to avoid performance
+ * bottlenecks, such as false sharing and cache issues. This optimization leads to increased
+ * throughput, especially when the number of consumers grows.
+ *
+ * Both the producer and the consumer will cache the indexes locally, loading them only when they
+ * can't produce or consume anymore.
+ * Moreover, consumers will update their index after consuming multiple messages,
+ * rather than updating it each time. By default, the queue is split into four batches
+ *
  *
  * @tparam T Type of th element
  * @tparam MAX_READERS Max consumers that can subscribe to this queue
