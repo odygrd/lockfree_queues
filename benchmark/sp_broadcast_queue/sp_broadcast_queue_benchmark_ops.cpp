@@ -17,7 +17,7 @@ int main()
   size_t const reader_batch_size = 4;
   int64_t const iterations = 10000000;
 
-  constexpr size_t MAX_READERS = 1;
+  constexpr size_t MAX_READERS = 3;
 
   lockfree_queues::SPBroadcastQueue<TestObj, MAX_READERS> q{queue_size, reader_batch_size};
 

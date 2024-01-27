@@ -144,7 +144,7 @@ public:
       _min_read_idx_cache = _read_idx[0].load(std::memory_order_acquire);
       for (size_t i = 1; i < _read_idx.size(); ++i)
       {
-        _min_read_idx_cache = std::min(_min_read_idx_cache, _read_idx[0].load(std::memory_order_acquire));
+        _min_read_idx_cache = std::min(_min_read_idx_cache, _read_idx[i].load(std::memory_order_acquire));
       }
 
       if ((_min_read_idx_cache == std::numeric_limits<size_t>::max()) ||
