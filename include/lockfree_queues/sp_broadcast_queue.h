@@ -104,37 +104,16 @@ public:
   SPBroadcastQueue& operator=(SPBroadcastQueue const&) = delete;
 
   template <typename... Args>
-  void emplace(Args&&... args)
+  [[gnu::always_inline, gnu::hot]] void emplace(Args&&... args)
   {
-    size_t const write_idx = _write_idx.load(std::memory_order_relaxed);
-
-    while ((_min_read_idx_cache == std::numeric_limits<size_t>::max()) ||
-           ((write_idx - _min_read_idx_cache) == _capacity))
+    while (!try_emplace(std::forward<Args>(args)...))
     {
-      _min_read_idx_cache = _read_idx[0].load(std::memory_order_acquire);
-      for (size_t i = 1; i < _read_idx.size(); ++i)
-      {
-        _min_read_idx_cache = std::min(_min_read_idx_cache, _read_idx[i].load(std::memory_order_acquire));
-      }
+      // retry
     }
-
-    value_type* slot = &_slots[write_idx & _capacity_minus_one];
-
-    if constexpr (!std::is_trivially_destructible_v<value_type>)
-    {
-      if (_write_idx >= _capacity)
-      {
-        // do not call the destructor until we have wrapped around at least once
-        slot->~value_type();
-      }
-    }
-
-    ::new (static_cast<void*>(slot)) value_type{std::forward<Args>(args)...};
-    _write_idx.store(write_idx + 1, std::memory_order_release);
   }
 
   template <typename... Args>
-  [[nodiscard]] bool try_emplace(Args&&... args)
+  [[gnu::always_inline, gnu::hot, nodiscard]] bool try_emplace(Args&&... args)
   {
     size_t const write_idx = _write_idx.load(std::memory_order_relaxed);
 
@@ -171,7 +150,7 @@ public:
     return true;
   }
 
-  [[nodiscard]] value_type const* front(size_t reader_id) noexcept
+  [[gnu::always_inline, gnu::hot, nodiscard]] value_type const* front(size_t reader_id) noexcept
   {
     if (_reader_cache[reader_id].read_local_idx == _reader_cache[reader_id].write_idx_cache)
     {
@@ -185,7 +164,7 @@ public:
     return reinterpret_cast<value_type const*>(&_slots[_reader_cache[reader_id].read_local_idx & _capacity_minus_one]);
   }
 
-  void pop(size_t reader_id) noexcept
+  [[gnu::always_inline, gnu::hot]] void pop(size_t reader_id) noexcept
   {
     _reader_cache[reader_id].read_local_idx += 1;
 
